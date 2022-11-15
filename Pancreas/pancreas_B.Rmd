@@ -1,0 +1,585 @@
+---
+title: "PDAC"
+author: "songcheng"
+date: "2022/7/30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import R package
+
+```{r cars}
+library(ggthemes)
+library(SPOTlight)
+library(fda)
+library(magrittr)
+library(Seurat)
+library(ggplot2)
+library(RColorBrewer)
+library(ggthemes)
+library(Seurat)
+#library(rcartocolors)
+library(Spaniel)
+library(scatterpie)
+library(FunSPOTlight)
+library(cowplot)
+library(rcartocolor)
+```
+
+## load data
+
+Using the data have been preposessing 
+
+```{r pressure, echo=FALSE}
+setwd("D:\\research\\undergraduate\\fda_ST\\true_data\\Pancreas\\scdata")
+pdac_A=readRDS("PDAC-A_itai_processed.rds")
+pdac_B=readRDS("PDAC-B_itai_processed.rds")
+```
+
+##UMAP
+
+```{r}
+cell_types <- sort(unique(c(as.character(pdac_A$annotation), as.character(pdac_B$annotation))))
+qual_col_pals <- brewer.pal.info[brewer.pal.info$category == 'qual', ]
+col_vector  <-  unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+df_col <- data.frame(plt_name = cell_types,
+                     df_name = gsub(pattern = "[[:punct:]]|[[:blank:]]", ".",
+                                    x = cell_types,
+                                    perl = TRUE),
+                     col_ct = col_vector[1:length(cell_types)])
+cell_types_B=cell_types[cell_types%in%pdac_B$annotation]
+```
+
+
+```{r}
+Idents(pdac_A) <- pdac_A$annotation
+umap_pdac_a <- DimPlot(pdac_A, reduction = "umap", group.by = "annotation") + scale_color_manual(values = as.character(df_col[as.character(df_col$plt_name) %in% cell_types, "col_ct"])) 
+  #scale_color_tableau(palette = "Tableau 20")+
+  #scale_x_discrete(breaks=NULL)+
+  #scale_y_discrete(breaks=NULL)+
+  #theme(axis.line = element_line(arrow = arrow(length = unit(0.5, 'cm'))))
+  #theme(element_blank())
+  #theme(axis.text.x = element_text(vjust=2))
+
+print(umap_pdac_a)
+```
+
+
+```{r}
+Idents(pdac_B) <- pdac_B$annotation
+umap_pdac_b <- DimPlot(pdac_B, reduction = "umap", group.by = "annotation") +
+  scale_color_manual(values = as.character(df_col[as.character(df_col$plt_name) %in% cell_types_B, "col_ct"]))+
+  #scale_color_tableau(palette = "Tableau 20")+
+  scale_x_discrete(breaks=NULL)+
+  scale_y_discrete(breaks=NULL)+
+  theme(axis.line = element_line(arrow = arrow(length = unit(0.5, 'cm'))))
+  #theme(element_blank())
+  #theme(axis.text.x = element_text(vjust=2))
+
+print(umap_pdac_b)
+```
+
+```{r}
+clust_vr="annotation"
+cl_n=200
+hvg=0
+```
+
+
+```{r}
+setwd("D:/research/undergraduate/fda_ST/true_data/Pancreas/ST_PANCREAS")
+stdata=readr::read_tsv("pdac_B_ST1.tsv")
+```
+
+
+```{r}
+coor_of_data=colnames(stdata)
+coor_of_data=coor_of_data[-1]
+#coor_of_data=c(coor_of_data,coor_of_data2)
+a=lapply(coor_of_data, function(x){
+  a1=as.vector(strsplit(x,"x"))
+  return(a1)
+})
+coor.data.matrix <- do.call(rbind, a)
+coor.data.matrix = do.call(rbind,coor.data.matrix)
+coor.data.matrix=apply(coor.data.matrix, 2, as.numeric)
+
+x=coor.data.matrix[,1]
+y=coor.data.matrix[,2]
+plot(y,x)
+```
+
+
+```{r}
+stdata=stdata[!duplicated(stdata[,1]),]
+stdata=stdata%>%tibble::column_to_rownames("Genes")
+
+rowname_stdata=rownames(stdata)
+
+stdata=apply(stdata, 2, as.numeric)
+rownames(stdata)=rowname_stdata
+```
+
+
+```{r}
+```
+
+
+```{r}
+setwd("D:/research/undergraduate/fda_ST/true_data/Pancreas/ST_PANCREAS")
+st_se <- Spaniel::createSeurat(counts = stdata, 
+                               barcodeFile = sprintf("barcode_A.txt"), 
+                               projectName = "stdata",
+                               sectionNumber = "1")
+```
+
+
+```{r}
+st_se$x=x
+st_se$y=y
+
+dim(st_se)
+setwd("D:/research/undergraduate/fda_ST/true_data/Pancreas/ST_PANCREAS")
+image=Spaniel::parseImage("image_B3.jpg")
+st_se@images <- list(image)
+```
+
+
+```{r}
+#pdac_A=pdac_A[,pdac_A$annotation%in%names(which(table(pdac_A$annotation)>40))]
+Seurat::Idents(object = pdac_B) <- pdac_B@meta.data[, clust_vr]
+cluster_markers_b <- Seurat::FindAllMarkers(object = pdac_B,
+                                              verbose = TRUE,
+                                              only.pos = TRUE,
+                                              assay = "SCT",
+                                              slot = "data")
+cluster_markers_b <- Seurat::FindAllMarkers(object = pdac_B,
+                                              verbose = TRUE,
+                                              only.pos = TRUE,
+                                              assay = "RNA",
+                                              slot = "data")
+cluster_markers_b %>% dplyr::count(cluster)
+setwd("D:/research/undergraduate/fda_ST/true_data/Pancreas/marker_genes")
+#saveRDS(cluster_markers_a,"cluster_markers_a_RNA.rds")
+cluster_markers_a=readRDS("cluster_markers_a_RNA.rds")
+
+# cluster_markers_all <- readRDS(file = sprintf("%s/%s/cluster_markers_%s_paula_specific.RDS",
+#                        an_mouse, robj_dir, id_comp))
+
+cluster_markers_filt_b <- cluster_markers_b %>% filter(pct.2 < 0.2)
+# cluster_markers_filt_b <- cluster_markers_b %>% filter(pct.2 < 0.5)
+# cluster_markers_filt_b <- cluster_markers_b %>% filter(pct.1 > 0.5)
+# cluster_markers_filt_b=cluster_markers_b
+# cluster_markers_filt_b %>% dplyr::count(cluster)
+# cluster_markers_filt_b$cluster <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+#                                      x = cluster_markers_filt_b$cluster, 
+#                                      perl = TRUE)
+# cell_types_B <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+#                                      x = cell_types_B, 
+#                                      perl = TRUE)
+# cluster_markers_filt_b1=cluster_markers_filt_b[cluster_markers_filt_b$cluster%in%
+#                                                  c(cell_types_B[1:4]),]
+# 
+# cluster_markers_filt_b <- cluster_markers_b %>% filter(pct.2 < 0.05)
+# cluster_markers_filt_b %>% dplyr::count(cluster)
+# cluster_markers_filt_b$cluster <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+#                                      x = cluster_markers_filt_b$cluster, 
+#                                      perl = TRUE)
+# cell_types_B <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+#                                      x = cell_types_B, 
+#                                      perl = TRUE)
+# cluster_markers_filt_b2=cluster_markers_filt_b[cluster_markers_filt_b$cluster%in%
+#                                                  c(cell_types_B[5:13]),]
+# cluster_markers_filt_b=rbind(cluster_markers_filt_b1,cluster_markers_filt_b2)
+```
+
+```{r}
+
+```
+
+
+```{r}
+se_sc_down <- downsample_se_obj(
+      se_obj = pdac_B,
+      clust_vr = clust_vr,
+      cluster_markers = cluster_markers_filt_b,
+      cl_n = 40,
+      hvg = hvg
+    )
+    
+    print("Deconvolute synthetic spots")
+    
+    geno = as.matrix(se_sc_down@assays$RNA@counts)
+    ST.matrix = as.matrix(st_se@assays$RNA@counts)
+    ST.matrix = ST.matrix[rownames(geno), ]
+    cell.type.factor = se_sc_down$"annotation"
+    
+    decon_mtrx = fun_spotlight2(
+      geno = geno,
+      ST.matrix = ST.matrix,
+      nkonts = 200,
+      nfpca = 20,
+      cell.type.factor = cell.type.factor,
+      min_count = 0.01,
+      Upper_Bound=1,
+      Lower_Bound=1
+    )
+    
+    decon_mtrx = t(decon_mtrx)
+```
+
+```{r}
+cell_types <- colnames(decon_mtrx)[! colnames(decon_mtrx) %in% "res_ss"]
+cell_types <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                   x = cell_types, 
+                   perl = TRUE)
+cell_types_B <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                   x = cell_types_B, 
+                   perl = TRUE)
+
+clust_vr="annotation"
+plt_names <- sort(unique(pdac_B@meta.data[, clust_vr]))
+
+df_plt_names <- data.frame(df_name = cell_types, 
+                           plt_name = plt_names)
+```
+
+```{r}
+decon_df=cbind(decon_mtrx,as.matrix(x))
+decon_df=cbind(decon_df,as.matrix(y))
+decon_df=data.frame(decon_df,row.names = seq(1:nrow(decon_df)))
+decon_mtrx1=data.frame(decon_mtrx)
+colnames(decon_df)=c(colnames(decon_mtrx1),"x","y")
+
+#df=cbind(decon_df[,16:19],decon_df[20:21])
+```
+
+```{r}
+setwd("D:\\research\\undergraduate\\fda_ST\\true_data\\Pancreas\\plot1\\plot_B")
+saveRDS(decon_mtrx,"decon_mtrx.rds")
+```
+
+
+```{r}
+plt=ggplot()+
+  geom_scatterpie(data = df,
+                  aes(x,y,r=0.5),
+                  cols =as.factor(colnames(df)[1:4]))+
+  scale_y_reverse()+
+theme_classic()  +scale_fill_manual(values = colorRampPalette(brewer.pal(19, "Pastel2"))(19))
+```
+
+
+```{r}
+plt1=ggplot()+
+  geom_scatterpie(data = decon_df,
+                  aes(x,y),
+                  cols = colnames(decon_df)[1:13],
+                  color = NA,
+                  alpha = 1, 
+                  pie_scale = 1.1)+
+  scale_y_reverse()+
+  theme_half_open(11, rel_small = 1) +
+  theme_void() + 
+  coord_fixed(ratio = 1) +
+  #scale_fill_manual(values = scale_color_brewer("Pastel2"))
+  scale_fill_manual(values = as.character(df_col[as.character(df_col$plt_name) %in% cell_types_B, "col_ct"])) 
+#theme_classic()  +scale_fill_manual(values = colorRampPalette(brewer.pal(19, "Pastel2"))(19))
+  #scale_fill_tableau(palette = "Hue Circle")
+  #scale_fill_manual(values =scale_color_tableau(palette = "Classic 20"))
+#scale_fill_manual(values = colorRampPalette(brewer.pal(19, "Pastel2"))(19))
+
+  #scale_color_tableau(palette = "Classic 20")
+  #scale_colour_calc()
+  #scale_fill_manual(values = colorRampPalette(brewer.pal(19, "Pastel2"))(19))
+
+
+plt2
+```
+
+
+
+## cell_types
+```{r}
+rownames(decon_mtrx) <- rownames(st_se@meta.data)
+colnames(decon_mtrx) <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                                  x = colnames(decon_mtrx), 
+                                  perl = TRUE)
+
+st_se@assays$RNA@scale.data <- t(decon_mtrx)
+#st_se@assays$RNA@data <- t(decon_mtrx)
+decon_mtrx1=as.data.frame(decon_mtrx)
+st_se$x=x-4
+st_se$y=y+5
+
+ct_plt <- lapply(cell_types_B, function(ct){
+  ct <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+             x = ct, 
+             perl = TRUE)
+  print(ct)
+  
+  #image4=Spaniel::parseImage("fn_image4.jpg")
+  #image2=Spaniel::parseImage("fn_image2.jpg")
+  #st_se@images <- list(image1,image2,image3,image4)
+  #st_se$y=(st_se$y/max(st_se$y))*30
+  #st_se$x=(st_se$x/max(st_se$x))*30
+  
+  tmp_plt <- spanielPlot(object = st_se, 
+                         grob = st_se@images[[1]],
+                         plotType = "Gene",
+                         gene = ct,
+                         ptSizeMax = 5, 
+                         ptSizeMin = 1,
+                         customTitle = sprintf(" Proportion of cell type: %s",ct)) +
+    #geom_point(aes(alpha = ct)) +
+    theme_classic() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),
+      axis.ticks = element_blank(),
+      axis.text = element_blank(),
+      axis.title = element_blank(),
+      axis.line = element_blank()
+    ) +
+    #guides(color=guide_legend(override.aes = list(size=15)))+
+    #scale_color_gradientn(colours = heat.colors(10, rev = TRUE),
+    #                      limits = c(0, 1), name = "Proportion") +
+    #scale_color_gradientn(colours = carto_pal(7,"OrYl"),
+    #                      limits = c(0, 1), name = "Proportion") +
+    scale_color_gradientn(
+        colours = wesanderson::wes_palette("Zissou1", 100,type = "continuous"),
+        name = "Proportion",limits = c(0, 1))+
+    scale_size_continuous(limits = c(0, 1), name = "Proportion")
+  #theme_classic() +
+  #    theme(
+  #      plot.title = element_text(hjust = 0.5, size = 10),
+  #      axis.ticks = element_blank(),
+  #      axis.text = element_blank(),
+  #      axis.title = element_blank(),
+  #      axis.line = element_blank()
+  #      ) +
+  #    scale_color_gradientn(
+        # colours = wesanderson::wes_palette("Zissou1", 100, type = "continuous"),
+  #      colours = heat.colors(10, rev = TRUE)) +
+      #labs(color = sprintf("Proportion: %s", ct),
+      #     size = sprintf("Proportion: %s", ct)) +
+      #coord_fixed(1)
+  #print(tmp_plt)
+  
+  # ggsave(
+  #   filename = sprintf("Proportion of cell type: %s", ct),
+  #   device = "png",
+  #   width = 8.56,
+  #   height = 8
+  # )
+  return(tmp_plt)
+})
+print(ct_plt)
+```
+##gene
+
+```{r}
+gene=rownames(cluster_markers_filt_b[cluster_markers_filt_b$cluster=="Endothelial cells",])[4]
+cell_types_B
+ct=cell_types_B[[6]]
+```
+
+
+```{r}
+library(magrittr)
+library(dplyr)
+ct_gene_df <- lapply(unique(cluster_markers_a$cluster), function(clust) {
+  ls1 <- cluster_markers_a[cluster_markers_a$cluster == clust, "gene"]
+  ls2 <- cluster_markers_a[cluster_markers_a$cluster != clust, "gene"]
+  ls1_unique <- ls1[! ls1 %in% ls2]
+
+  return(cluster_markers_a[cluster_markers_a$cluster == clust & cluster_markers_a$gene %in% ls1_unique, ])
+}) %>%
+  bind_rows() %>%
+  filter(gene %in% rownames(data)) %>% 
+  group_by(cluster) %>% 
+  arrange(cluster, p_val) %>% 
+  # top_n(1) %>%
+  filter(row_number() == 1) %>%
+  data.frame()
+
+#st_se@assays$RNA@scale.data=as.matrix(stdata)
+st_se@assays$RNA@scale.data=as.matrix(st_se@assays$RNA@data)
+#st_se1@assays$RNA@scale.data=as.matrix(st_se1@assays$RNA@data)
+
+gene_plt <- lapply(cell_types_A, function(ct) {
+    print(ct)
+    ct_gene_df$cluster <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                                     x = ct_gene_df$cluster, 
+                                     perl = TRUE)
+    cell_types <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                                     x = cell_types, 
+                                     perl = TRUE)
+    ct <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                                     x = ct, 
+                                     perl = TRUE)
+    
+    gene <- ct_gene_df[ct_gene_df$cluster == ct, "gene"]
+    print(gene)
+    mid=mean(st_se@assays$RNA@scale.data[gene,])
+    tmp_plt <- spanielPlot(object = st_se,
+            grob = st_se@images[[1]],
+            plotType = "Gene",
+            gene = gene,
+            ptSizeMax = 5, 
+            ptSizeMin = 0,
+            customTitle = sprintf("Expression of: %s (marker gene of Endothelial)",  gene)) +
+      theme_classic() +
+      #scale_color_carto_c(palette = "OrYel")+
+      scale_color_gradientn(
+        colours = wesanderson::wes_palette("Zissou1", type = "continuous"))+
+      theme(
+      plot.title = element_text(hjust = 0.5, size = 20),
+      axis.ticks = element_blank(),
+      axis.text = element_blank(),
+      axis.title = element_blank(),
+      axis.line = element_blank()
+    )
+    tmp_plt
+
+  })
+
+```
+
+```{r}
+gene_ct_plt=lapply(seq_len(length(gene_plt)), function(i) {
+    arr_plt <- cowplot::plot_grid(plotlist = list(gene_plt[[i]], ct_plt[[i]]),
+                      ncol = 2, 
+                      nrow = 1) +   
+      theme(plot.background = element_rect(fill = NA, color = "black", size = 2),
+        panel.background = element_blank(),
+        plot.margin = margin(10, 10, 10, 10))
+
+    ## Rounded edges
+    g <- ggplotGrob(arr_plt)
+    bg <- g$grobs[[1]]
+    round_bg <- grid::roundrectGrob(x=bg$x, y=bg$y, width=bg$width, height=bg$height,
+                              r=unit(0.1, "snpc"),
+                              just=bg$just, name=bg$name, gp=bg$gp, vp=bg$vp)
+    g$grobs[[1]] <- round_bg
+    g_plt <- cowplot::plot_grid(g) + theme(plot.margin = margin(10, 10, 10, 10))
+    return(g_plt)
+
+  }) 
+```
+
+```{r}
+decon_mtrx <- decon_mtrx[, colnames(decon_mtrx)[!colnames(decon_mtrx) %in% "res_ss"]]
+  
+  # Change to right column names
+  colnames(decon_mtrx) <- gsub(pattern = "[[:punct:]]|[[:blank:]]", ".", 
+                                 x = colnames(decon_mtrx), 
+                                 perl = TRUE)
+  new_names <- data.frame(df_name = colnames(decon_mtrx)) %>% 
+    left_join(df_col, by = "df_name") %>% 
+    pull(plt_name)
+  
+  colnames(decon_mtrx) <- new_names
+  
+  hm_plt <- get_colocalization_heatmap(decon_mtrx = decon_mtrx)+
+    labs(title = sprintf("Colocalization heatmap"))  +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),
+      axis.text = element_text(size = 12),
+      axis.title = element_text(size = 15))
+  hm_plt
+```
+
+```{r}
+cancer_prop <- decon_mtrx[, c( "Cancer.clone..TM4SF1.")]
+healthy_prop <- rowSums(decon_mtrx[, colnames(decon_mtrx)!= "Cancer.clone..TM4SF1."])
+endothelial_prop=decon_mtrx[, "Endothelial.cells"]
+# par(mfrow = c(2, 1))
+st_se[["cancer_prop"]] <- cancer_prop
+st_se[["healthy_prop"]] <- healthy_prop
+st_se[["endothelial_prop"]] <- endothelial_prop
+```
+
+```{r}
+pt1 <- Spaniel::spanielPlot(object = st_se,
+                     grob = st_se@images[[1]], 
+                     plotType = "Cluster", 
+                     clusterRes = "endothelial_prop", 
+                     ptSize = 5) +
+  theme_void() +
+  coord_fixed(1) +
+  scale_alpha(range = c(1, 1)) +
+  #scale_y_reverse()+
+  scale_color_gradientn(
+        colours = wesanderson::wes_palette("Zissou1", 100, type = "continuous"))
+        # colours = heat.colors(10, rev = TRUE))
+pt1
+```
+```{r}
+pt2 <- Spaniel::spanielPlot(object = st_se,
+                     grob = st_se@images[[1]], 
+                     plotType = "Cluster", 
+                     clusterRes = "healthy_prop", 
+                     ptSize = 5) +
+  theme_void() +
+  coord_fixed(1) +
+  scale_alpha(range = c(1, 1)) +
+  scale_color_gradientn(
+        colours = wesanderson::wes_palette("Zissou1", 100, type = "continuous"))
+        # colours = heat.colors(10, rev = TRUE))
+pt2
+```
+
+```{r}
+st_se[["status_2_territories"]] <- if_else(st_se$cancer_prop > 0.3, "Tumoral", "Non-Tumoral")
+st_se[["status_4_territories"]] <- if_else(st_se$endothelial_prop > 0.05, "endothelial", "Non-endothelial")
+# st_se[["status_3_territories"]] <- if_else(st_se$cancer_prop < 0.4 & 
+#                                        st_se$healthy_prop < 0.4 & 
+#                                        st_se$y > 16, "Intermediate",
+#                                      if_else(st_se$cancer_prop > 0.4, "Tumoral", "Non-Tumoral"))
+
+st_se[["status_3_territories"]] <- if_else(st_se$cancer_prop < 0.4 &
+                                             st_se$healthy_prop < 0.4 & 
+                                             st_se$y > 16,
+                                           "Intermediate",
+                                           if_else(st_se$cancer_prop < 0.4 &
+                                             st_se$healthy_prop < 0.4 & 
+                                             st_se$y < 16,
+                                           "Removed manually",
+                                           if_else(st_se$cancer_prop > 0.4,
+                                                   "Tumoral", 
+                                                   "Non-Tumoral")))
+```
+
+```{r}
+# Inverse Y to flip the coordinates
+data_df <- data.frame(st_se@meta.data)
+data_df$y_inv <- 36 - data_df$y
+
+# data_df[, point_size] <- if_else(data_df[, point_size] == 0, NA_real_, data_df[, point_size])
+
+tmp_plt_2 <- ggplot(data_df,
+                ggplot2::aes_string("x", "y_inv",
+                                    color = "status_2_territories" 
+                                    # alpha = point_alpha
+                                    )) +
+  ggplot2::xlim(1, 33) +
+  ggplot2::ylim(1, 35) +
+  # Layer 1 - Plot image
+  ggplot2::annotation_custom(st_se@images[[1]],
+                             xmin = 1,
+                             xmax = 33,
+                             ymin = 1,
+                             ymax = 35) +
+  # Layer 2 - Plot points
+  geom_point(size = 5, alpha = 0.8) +
+  labs(color = "Tissue stratification") +
+  coord_fixed(1) +
+  theme_void() +
+  scale_color_manual(values = c("#00A087FF", "#E64B35FF"))
+
+tmp_plt_2
+```
+
